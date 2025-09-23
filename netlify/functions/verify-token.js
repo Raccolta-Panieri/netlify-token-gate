@@ -1,10 +1,14 @@
-import crypto from "crypto";
+// netlify/functions/verify-token.js  (CommonJS)
+const crypto = require('crypto');
+const fetch = require('node-fetch');
 
-export async function handler(event) {
+exports.handler = async function(event) {
   try {
     if (event.httpMethod !== 'POST') return { statusCode: 405, body: "method not allowed" };
 
-    const body = JSON.parse(event.body || '{}');
+    let body = {};
+    try { body = JSON.parse(event.body || '{}'); } catch(e){ body = {}; }
+
     const token = body.t || body.token;
     const turnstileResp = body['cf-turnstile-response'] || body.turnstile_response;
     if (!token) return { statusCode: 400, body: JSON.stringify({ error: 'missing token' }) };
@@ -12,12 +16,13 @@ export async function handler(event) {
 
     // verify Turnstile
     const verifyUrl = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
-    const form = new URLSearchParams();
-    form.append('secret', process.env.TURNSTILE_SECRET || '');
-    form.append('response', turnstileResp);
-    const remoteip = event.headers['x-forwarded-for']?.split(',')[0]?.trim() || event.headers['cf-connecting-ip'];
-    if (remoteip) form.append('remoteip', remoteip);
-    const vRes = await fetch(verifyUrl, { method:'POST', body: form });
+    const params = new URLSearchParams();
+    params.append('secret', process.env.TURNSTILE_SECRET || '');
+    params.append('response', turnstileResp);
+    const remoteip = event.headers && (event.headers['x-forwarded-for'] || event.headers['X-Forwarded-For'])?.split(',')[0]?.trim() || (event.headers && event.headers['cf-connecting-ip']);
+    if (remoteip) params.append('remoteip', remoteip);
+
+    const vRes = await fetch(verifyUrl, { method:'POST', body: params });
     const vJson = await vRes.json();
     if (!vJson.success) {
       return { statusCode: 401, body: JSON.stringify({ ok:false, detail: 'turnstile failed', verify: vJson }) };
@@ -39,7 +44,7 @@ export async function handler(event) {
     let meta;
     try { meta = JSON.parse(gotJson.result); } catch(e) { meta = { redirectUrl: String(gotJson.result), createdAt: Date.now(), ttlSeconds: parseInt(process.env.DEFAULT_TTL_SECONDS||'300',10), uses:0 }; }
 
-    # rate-limit per IP (basic)
+    // rate-limit per IP (basic)
     const RATE_LIMIT_PER_MIN = parseInt(process.env.RATE_LIMIT_PER_MIN || '60', 10);
     if (remoteip) {
       const minuteKey = `rl:ip:${remoteip}:${Math.floor(Date.now()/60000)}`;
@@ -91,4 +96,4 @@ export async function handler(event) {
     console.error("verify-token error:", err);
     return { statusCode: 500, body: JSON.stringify({ ok:false, error: 'internal error' }) };
   }
-}
+};
