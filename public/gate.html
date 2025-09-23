@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gate - Turnstile</title>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <style>
+    body{font-family:system-ui,Helvetica,Arial;padding:32px;background:#f6f8fb}
+    .card{max-width:700px;margin:0 auto;background:white;padding:24px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
+    button{background:#0b74ff;color:white;border:none;padding:10px 14px;border-radius:8px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Gate protetto (Turnstile)</h2>
+    <p>Questo file mostra come verificare un token e Turnstile prima del redirect.</p>
+    <label>Token (query param ?t=...)</label>
+    <input id="token" style="width:100%;padding:8px;margin:8px 0" placeholder="Inserisci ?t=TOKEN o lascia vuoto per leggere ?t dal querystring" />
+    <div id="turnstile" class="cf-turnstile" data-sitekey="PUT_YOUR_TURNSTILE_SITEKEY_HERE"></div>
+    <p><button id="go">Verifica e vai</button></p>
+    <pre id="out" style="white-space:pre-wrap;background:#f3f4f6;padding:10px;border-radius:8px"></pre>
+  </div>
+  <script>
+    function qs(name){ const p=new URLSearchParams(location.search); return p.get(name); }
+    document.getElementById('token').value = qs('t') || '';
+    document.getElementById('go').addEventListener('click', async ()=>{
+      const t = document.getElementById('token').value.trim();
+      if(!t){ alert('Inserisci token'); return; }
+      try {
+        // render widget and get response
+        const widget = turnstile.render(document.getElementById('turnstile'));
+        const response = await new Promise((resolve,reject)=>{
+          turnstile.on('submit', (e)=>{}); // noop
+          // turnstile.getResponse not available in new API; use execute-like flow
+          // the widget will set a hidden input value internally; use grecaptcha-like is not available
+          // As fallback, rely on serverless verify using the widget's automatic form post via callback
+          // For simplicity, we ask user to interact then click again; this is minimal demo code.
+          setTimeout(()=>{ resolve(window.__turnstile_token || ''); }, 1000);
+        });
+        document.getElementById('out').textContent = 'Turnstile token (demo): '+response;
+        const res = await fetch('/.netlify/functions/verify-token', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ t, 'cf-turnstile-response': response })
+        });
+        const j = await res.json();
+        document.getElementById('out').textContent = JSON.stringify(j, null, 2);
+        if(j.ok && j.url) location.href = j.url;
+      } catch(e){
+        document.getElementById('out').textContent = 'Errore: '+String(e);
+      }
+    });
+  </script>
+</body>
+</html>
