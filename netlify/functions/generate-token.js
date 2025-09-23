@@ -1,6 +1,6 @@
 // netlify/functions/generate-token.js  (CommonJS)
 const crypto = require('crypto');
-const fetch = require('node-fetch');
+
 
 exports.handler = async function(event) {
   try {
