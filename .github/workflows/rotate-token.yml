@@ -1,0 +1,27 @@
+name: Rotate Default Token
+
+on:
+  schedule:
+    - cron: '0 */20 * * *'   # ogni 20 ore (puoi modificare)
+  workflow_dispatch:
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    env:
+      SITE_URL: https://1panieri-per-tutti.netlify.app
+    steps:
+      - name: Generate and set default token (call Netlify function)
+        run: |
+          echo "Calling generate-token to rotate default token..."
+          resp=$(curl -s -X POST "${SITE_URL}/.netlify/functions/generate-token" \
+            -H "x-admin-key: ${{ secrets.ADMIN_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"url":"https://linktr.ee/ECampus8?utm_source=linktree_profile_share&ltsid=12a21a65-043d-4119-a014-c7e77659df8f","ttl":108000,"set_default":1}')
+          echo "Response from function: $resp"
+          if ! echo "$resp" | grep -q '"token"'; then
+            echo "No token found in response; failing job."
+            echo "Full response: $resp"
+            exit 1
+          fi
+          echo "Rotation done."
